@@ -8,6 +8,7 @@ import os
 
 from leap.lib.leap_app import leap_app
 from leap.lib.units.angles import *
+from leap.lib.geometry import coordinates
 
 
 fontsize = 20
@@ -30,6 +31,7 @@ class Patch(object):
         self.obs_time = obs_time_hours / 3600.0
         self.obs_time_hours = obs_time_hours
         self.delta_label = delta_label_deg
+        self.ra, self.dec = coordinates.gal_to_eq(from_degrees(center[0]), from_degrees(center[1]))
 
     def plot_contour(self):
         lon_min = self.center[0] - self.xsize_deg/2.0
@@ -42,30 +44,36 @@ class Patch(object):
 
     def upsample(self, x, delta=100):
         return np.interp(np.linspace(0, x.size-1, delta), np.arange(x.size), x)
+
+    def __str__(self):
+        return "%s: RA = %s, Dec = %s (in radians: %f)" %(self.name, to_hours_minutes_seconds_string(self.ra), to_degrees_minutes_seconds_string(self.dec), self.dec)
         
 class PatchPlotter(leap_app.App):
 
     def run(self):
         self.load_pysm()
         patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), 
-                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0),
-                         Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
-        self.plot_I_P_p_fullsky(patches, plot_patch=True)
+                         #Patch("patch0b", [-110.5, 14.25, 0], 5.0, 5.0, 96.0, 2.0)] #,
+                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #,
+                         #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
+        #self.plot_I_P_p_fullsky(patches, plot_patch=True)
         self.patches = patches
-        if True:
+        if False:
             for patch in patches:
                 self.plot_sn_fullsky(patch)
                 #self.plot_mollzoom_to_search_for_best_patch(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
         if True:
             for patch in patches:
                 self.plot_selected_patch(patch)
+                print patch
 
     def plot_selected_patch(self, patch):
         pl.suptitle("%s Gal Coord Center: %s" %(patch.name, str(patch.center)))
         delta = 2.0
         phis = np.round(np.arange(patch.center[0]-patch.xsize_deg/2.0, patch.center[0]+patch.xsize_deg/2.0, patch.delta_label))
         thetas = np.round(np.arange(patch.center[1]-patch.ysize_deg/2.0, patch.center[1]+patch.ysize_deg/2.0, patch.delta_label))
-        reso = 1.7
+        #reso = 1.7
+        reso = 1.0
         xsize = to_arcmin(from_degrees(patch.xsize_deg))/reso
         ysize = to_arcmin(from_degrees(patch.ysize_deg))/reso
         # I
@@ -84,12 +92,13 @@ class PatchPlotter(leap_app.App):
         self.make_cbar("P/I (percent) ", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # Pol SNR
-        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
-        hp.gnomview(sn_map, rot=patch.center, coord="G", min=0, max=10.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, unit="unitless", sub=(2, 2, 4), notext=True, title="", cmap="seismic")
+        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, pix_area=from_arcmin(reso))
+        sn_gnom_map = hp.gnomview(sn_map, rot=patch.center, coord="G", min=0, max=10.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, unit="unitless", sub=(2, 2, 4), notext=True, title="", cmap="seismic")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         self.make_cbar("Polarized SNR", "%1.0f")
         self.save_and_show(os.path.join(self.out_path, "%s_SNR_%dGHz_%d_%2.0fdeg_%2.0fh.png" %(patch.name, self.settings.frequency, self.settings.nside, to_degrees(to_degrees(patch_area)), patch.obs_time_hours)), 
                            figsize=(16, 10), save=self.settings.save, show=self.settings.show) 
+        print "For patch %s, there are %d pixels with SNR > 3" %(patch.name, (sn_gnom_map > 3).sum())
 
     def make_cbar(self, label, format_, ticks=None):
         fig = pl.gcf()
@@ -117,8 +126,9 @@ class PatchPlotter(leap_app.App):
         self.maps.append(np.sqrt(self.maps[1]**2 + self.maps[2]**2))
         self.maps = np.array(self.maps)
 
-    def get_snr_map(self, patch_xsize_deg, patch_ysize_deg, obs_time_hours):
-        pix_area = hp.nside2pixarea(hp.npix2nside(self.maps[0].size))
+    def get_snr_map(self, patch_xsize_deg, patch_ysize_deg, obs_time_hours, pix_area=None):
+        if pix_area is None:
+            pix_area = hp.nside2pixarea(hp.npix2nside(self.maps[0].size))
         patch_area = from_degrees(patch_xsize_deg)*from_degrees(patch_ysize_deg)
         sensitivity = self.get_sensitivity(patch_area, pix_area, obs_time_hours)
         sn_map = self.maps[3]/sensitivity
