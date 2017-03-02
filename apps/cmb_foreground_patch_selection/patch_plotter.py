@@ -10,7 +10,7 @@ from leap.lib.leap_app import leap_app
 from leap.lib.units.angles import *
 
 
-fontsize = 20
+fontsize = 22
 mpl.rcParams["font.size"] = fontsize
 mpl.rcParams["xtick.labelsize"] = fontsize
 mpl.rcParams["ytick.labelsize"] = fontsize
@@ -45,49 +45,44 @@ class Patch(object):
         
 class PatchPlotter(leap_app.App):
 
-    def run(self):
-        self.load_pysm()
-        patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), 
-                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0),
-                         Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
-        self.plot_I_P_p_fullsky(patches, plot_patch=True)
-        self.patches = patches
-        if True:
-            for patch in patches:
-                self.plot_sn_fullsky(patch)
-                #self.plot_mollzoom_to_search_for_best_patch(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
-        if True:
-            for patch in patches:
-                self.plot_selected_patch(patch)
-
     def plot_selected_patch(self, patch):
-        pl.suptitle("%s Gal Coord Center: %s" %(patch.name, str(patch.center)))
         delta = 2.0
         phis = np.round(np.arange(patch.center[0]-patch.xsize_deg/2.0, patch.center[0]+patch.xsize_deg/2.0, patch.delta_label))
         thetas = np.round(np.arange(patch.center[1]-patch.ysize_deg/2.0, patch.center[1]+patch.ysize_deg/2.0, patch.delta_label))
         reso = 1.7
         xsize = to_arcmin(from_degrees(patch.xsize_deg))/reso
         ysize = to_arcmin(from_degrees(patch.ysize_deg))/reso
+        # Remove mean of Pol over patch for better SNR estimate
+        imap = hp.gnomview(self.maps[0], rot=patch.center, coord="G", reso=reso, xsize=xsize, ysize=ysize, return_projected_map=True, fig=5)
+        qmap = hp.gnomview(self.maps[1], rot=patch.center, coord="G", reso=reso, xsize=xsize, ysize=ysize, return_projected_map=True, fig=5)
+        umap = hp.gnomview(self.maps[2], rot=patch.center, coord="G", reso=reso, xsize=xsize, ysize=ysize, return_projected_map=True, fig=5)
+        imean = imap.flatten().mean()
+        qmean = qmap.flatten().mean()
+        umean = umap.flatten().mean()
+        pol_map = np.sqrt((self.maps[1]-qmean)**2 + (self.maps[2]-umean)**2)
+        print 'In patch', patch.name, 'the means in MJy/sr are Qmean = %f and Umean = %f' %(qmean, umean)
+        pl.close(5)
+        pl.suptitle("%s Gal Coord Center: %s" %(patch.name, str(patch.center)), y=0.999)
         # I
-        hp.gnomview(np.log10(self.maps[0]), 
-                             rot=patch.center, coord="G", min=-1, max=3.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 1), notext=True, cmap="seismic", title="")
-        self.make_cbar("I (log10(MJy/sr)", "%1.1f")
+        hp.gnomview(self.maps[0]-imean, 
+                             rot=patch.center, coord="G", min=0, max=0.8, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 1), notext=True, cmap="seismic", title="")
+        self.make_cbar("Mean removed I (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # P
-        hp.gnomview(np.log10(self.maps[3]), 
-                             rot=patch.center, coord="G", min=-1, max=0.2, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
-        self.make_cbar("P (log10(MJy/sr)", "%1.1f")
+        hp.gnomview(pol_map, 
+                             rot=patch.center, coord="G", min=0, max=0.4, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
+        self.make_cbar("P (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # p
         hp.gnomview(self.maps[3]/abs(self.maps[0])*100, 
-                             rot=patch.center, coord="G", min=0, max=20, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 3), notext=True, cmap="seismic", title="")
+                             rot=patch.center, coord="G", min=0, max=30, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 3), notext=True, cmap="seismic", title="")
         self.make_cbar("P/I (percent) ", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
-        # Pol SNR
-        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
+        # SNR
+        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, pol_map)
         hp.gnomview(sn_map, rot=patch.center, coord="G", min=0, max=10.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, unit="unitless", sub=(2, 2, 4), notext=True, title="", cmap="seismic")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
-        self.make_cbar("Polarized SNR", "%1.0f")
+        self.make_cbar("Polarized SNR", "%1.0f") #\n(mean removed in Q/U)
         self.save_and_show(os.path.join(self.out_path, "%s_SNR_%dGHz_%d_%2.0fdeg_%2.0fh.png" %(patch.name, self.settings.frequency, self.settings.nside, to_degrees(to_degrees(patch_area)), patch.obs_time_hours)), 
                            figsize=(16, 10), save=self.settings.save, show=self.settings.show) 
 
@@ -117,11 +112,11 @@ class PatchPlotter(leap_app.App):
         self.maps.append(np.sqrt(self.maps[1]**2 + self.maps[2]**2))
         self.maps = np.array(self.maps)
 
-    def get_snr_map(self, patch_xsize_deg, patch_ysize_deg, obs_time_hours):
+    def get_snr_map(self, patch_xsize_deg, patch_ysize_deg, obs_time_hours, map_):
         pix_area = hp.nside2pixarea(hp.npix2nside(self.maps[0].size))
         patch_area = from_degrees(patch_xsize_deg)*from_degrees(patch_ysize_deg)
         sensitivity = self.get_sensitivity(patch_area, pix_area, obs_time_hours)
-        sn_map = self.maps[3]/sensitivity
+        sn_map = map_/sensitivity
         return sn_map, pix_area, patch_area
 
     def plot_mollzoom_to_search_for_best_patch(self, patch_xsize_deg, patch_ysize_deg, obs_time_hours):
@@ -135,7 +130,8 @@ class PatchPlotter(leap_app.App):
         hp.set_g_clim(-1, 3.0)
         self.plot_blast_contour(coord="C")
         # SNR
-        sn_map, pix_area, patch_area = self.get_snr_map(patch_xsize_deg, patch_ysize_deg, obs_time_hours)
+        pol_map = np.sqrt((self.maps[1]-self.maps[1].mean())**2 + (self.maps[2]-self.maps[2].mean())**2)
+        sn_map, pix_area, patch_area = self.get_snr_map(patch_xsize_deg, patch_ysize_deg, obs_time_hours, pol_map)
         #hp.mollzoom(sn_map, title="SNR at %d GHz, patch area %3.0f sq deg\npix size = %1.1f\', obs time %2.0f hours" %(self.settings.frequency, to_degrees(to_degrees(patch_area)), 
         #            to_arcmin(np.sqrt(pix_area)), obs_time_hours), coord=["G", "C"], cmap='seismic', min=0, max=10.0, unit="unitless", rot=(0, 180, 180))
         hp.mollzoom(sn_map, title="SNR at %d GHz, patch area %3.0f sq deg\npix size = %1.1f\', obs time %2.0f hours" %(self.settings.frequency, to_degrees(to_degrees(patch_area)), 
@@ -186,7 +182,7 @@ class PatchPlotter(leap_app.App):
     def plot_sn_fullsky(self, patch):
         phis = pl.arange(-120, 60, 30)
         thetas = pl.arange(-60, 0, 30)
-        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
+        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, self.maps[3]-self.maps[3].mean())
         lon_range = [-115, 65] # [-135, 120]
         lat_range = [-70, -10] # [-90, 0]
         hp.cartview(sn_map, title="%s SNR at %d GHz, patch area %3.0f sq deg\npix size = %1.1f\', obs time %2.0f hours" %(patch.name, self.settings.frequency, to_degrees(to_degrees(patch_area)), 
@@ -231,6 +227,20 @@ class PatchPlotter(leap_app.App):
             hp.projtext(phis[i], patch.center[1]-patch.ysize_deg/2.0, xlabels[i], lonlat=True, fontsize=fontsize-4, ha='center', va="top", direct=False)
         for i in range(thetas.size):
             hp.projtext(patch.center[0]+patch.xsize_deg/2.0+0.2, thetas[i], ylabels[i], lonlat=True, fontsize=fontsize-4, va='center', ha="right", direct=False)
+
+    def run(self):
+        self.load_pysm()
+        patches = [#Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), Patch("patch0-peter",  [249.5, 14.25, 0], 5.0, 5.0, 146.0, 2.0),
+                   Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #, 
+                   #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
+        self.plot_I_P_p_fullsky(patches, plot_patch=True)
+        if True:
+            for patch in patches:
+                self.plot_sn_fullsky(patch)
+                #self.plot_mollzoom_to_search_for_best_patch(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
+        if True:
+            for patch in patches:
+                self.plot_selected_patch(patch)
 
 
 if __name__ == "__main__":
