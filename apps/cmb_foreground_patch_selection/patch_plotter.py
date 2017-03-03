@@ -46,28 +46,12 @@ class Patch(object):
         return np.interp(np.linspace(0, x.size-1, delta), np.arange(x.size), x)
 
     def __str__(self):
-        return "%s: RA = %s, Dec = %s (in radians: %f)" %(self.name, to_hours_minutes_seconds_string(self.ra), to_degrees_minutes_seconds_string(self.dec), self.dec)
+        return "%s: RA = %s, Dec = %s" %(self.name, to_hours_minutes_seconds_string(self.ra), to_degrees_minutes_seconds_string(self.dec))
         
 class PatchPlotter(leap_app.App):
 
-    def run(self):
-        self.load_pysm()
-        patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), 
-                         #Patch("patch0b", [-110.5, 14.25, 0], 5.0, 5.0, 96.0, 2.0)] #,
-                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #,
-                         #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
-        #self.plot_I_P_p_fullsky(patches, plot_patch=True)
-        self.patches = patches
-        if False:
-            for patch in patches:
-                self.plot_sn_fullsky(patch)
-                #self.plot_mollzoom_to_search_for_best_patch(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
-        if True:
-            for patch in patches:
-                self.plot_selected_patch(patch)
-                print patch
-
     def plot_selected_patch(self, patch):
+        print patch
         delta = 2.0
         phis = np.round(np.arange(patch.center[0]-patch.xsize_deg/2.0, patch.center[0]+patch.xsize_deg/2.0, patch.delta_label))
         thetas = np.round(np.arange(patch.center[1]-patch.ysize_deg/2.0, patch.center[1]+patch.ysize_deg/2.0, patch.delta_label))
@@ -92,9 +76,8 @@ class PatchPlotter(leap_app.App):
         self.make_cbar("Mean removed I (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # P
-        hp.gnomview(pol_map, 
-                             rot=patch.center, coord="G", min=0, max=0.4, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
-        self.make_cbar("P (MJy/sr)", "%1.1f")
+        hp.gnomview(pol_map, rot=patch.center, coord="G", min=0, max=0.4, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
+        self.make_cbar("Differential P (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # p
         hp.gnomview(self.maps[3]/abs(self.maps[0])*100, 
@@ -102,8 +85,9 @@ class PatchPlotter(leap_app.App):
         self.make_cbar("P/I (percent) ", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # Pol SNR
-        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, pix_area=from_arcmin(reso))
-        sn_gnom_map = hp.gnomview(sn_map, rot=patch.center, coord="G", min=0, max=10.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, unit="unitless", sub=(2, 2, 4), notext=True, title="", cmap="seismic")
+        sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, pol_map, pix_area=from_arcmin(reso)*from_arcmin(reso))
+        #sn_map, pix_area, patch_area = self.get_snr_map(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours, pol_map)
+        sn_gnom_map = hp.gnomview(sn_map, rot=patch.center, coord="G", min=0, max=10.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, unit="unitless", sub=(2, 2, 4), notext=True, title="", cmap="seismic", return_projected_map=True)
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         self.make_cbar("Polarized SNR", "%1.0f") #\n(mean removed in Q/U)
         self.save_and_show(os.path.join(self.out_path, "%s_SNR_%dGHz_%d_%2.0fdeg_%2.0fh.png" %(patch.name, self.settings.frequency, self.settings.nside, to_degrees(to_degrees(patch_area)), patch.obs_time_hours)), 
@@ -236,7 +220,7 @@ class PatchPlotter(leap_app.App):
         return np.interp(np.linspace(0, x.size-1, delta), np.arange(x.size), x)
         
     def make_coord_labels(self, phis, thetas, delta_grid, coord="C", lw=2):
-        hp.graticule(coord=coord, dpar=delta_grid, dmer=delta_grid, color="white", local=False, linestyle=":", lw=lw)
+        hp.graticule(coord=coord, dpar=delta_grid, dmer=delta_grid, color="white", local=False, linestyle=":", lw=lw, verbose=False)
         xlabels = ["%d$\degree$" %label for label in (180+phis)]
         ylabels = ["%d$\degree$" %label for label in (thetas)]
         for i in range(phis.size):
@@ -245,7 +229,7 @@ class PatchPlotter(leap_app.App):
             hp.projtext(60, thetas[i], ylabels[i], lonlat=True, fontsize=20, va='center', ha="right", direct=True)
 
     def make_coord_labels_patches(self, phis, thetas, patch, coord="C", lw=2):
-        hp.graticule(coord=coord, dpar=patch.delta_label/2.0, dmer=patch.delta_label/2.0, color="white", local=False, linestyle=":", lw=lw)
+        hp.graticule(coord=coord, dpar=patch.delta_label/2.0, dmer=patch.delta_label/2.0, color="white", local=False, linestyle=":", lw=lw, verbose=False)
         xlabels = ["%d$\degree$" %label for label in (phis)]
         ylabels = ["%d$\degree$" %label for label in (thetas)]
         for i in range(phis.size):
@@ -255,18 +239,19 @@ class PatchPlotter(leap_app.App):
 
     def run(self):
         self.load_pysm()
-        patches = [#Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), Patch("patch0-peter",  [249.5, 14.25, 0], 5.0, 5.0, 146.0, 2.0),
-                   Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #, 
-                   #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
-        self.plot_I_P_p_fullsky(patches, plot_patch=True)
-        if True:
+        patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), 
+                         #Patch("patch0b", [-110.5, 14.25, 0], 5.0, 5.0, 96.0, 2.0)] #,
+                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #,
+                         #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
+        #self.plot_I_P_p_fullsky(patches, plot_patch=True)
+        self.patches = patches
+        if False:
             for patch in patches:
                 self.plot_sn_fullsky(patch)
                 #self.plot_mollzoom_to_search_for_best_patch(patch.xsize_deg, patch.ysize_deg, patch.obs_time_hours)
         if True:
             for patch in patches:
                 self.plot_selected_patch(patch)
-
 
 if __name__ == "__main__":
     patch_plotter = PatchPlotter()

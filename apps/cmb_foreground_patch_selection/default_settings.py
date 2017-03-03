@@ -5,8 +5,8 @@ settings = generic.Class()
 
 settings.nside = 2048
 settings.frequency = 1200 # 600, 860, 1200
-settings.show = False
-settings.save = True
+settings.show = True
+settings.save = False
 
 
 
