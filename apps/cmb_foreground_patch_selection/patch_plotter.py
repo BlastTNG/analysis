@@ -55,8 +55,8 @@ class PatchPlotter(leap_app.App):
         delta = 2.0
         phis = np.round(np.arange(patch.center[0]-patch.xsize_deg/2.0, patch.center[0]+patch.xsize_deg/2.0, patch.delta_label))
         thetas = np.round(np.arange(patch.center[1]-patch.ysize_deg/2.0, patch.center[1]+patch.ysize_deg/2.0, patch.delta_label))
-        #reso = 1.7
-        reso = 1.0
+        reso = 1.7
+        #reso = 1.0
         xsize = to_arcmin(from_degrees(patch.xsize_deg))/reso
         ysize = to_arcmin(from_degrees(patch.ysize_deg))/reso
         # Remove mean of Pol over patch for better SNR estimate
@@ -72,11 +72,11 @@ class PatchPlotter(leap_app.App):
         pl.suptitle("%s Gal Coord Center: %s" %(patch.name, str(patch.center)), y=0.999)
         # I
         hp.gnomview(self.maps[0]-imean, 
-                             rot=patch.center, coord="G", min=0, max=0.8, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 1), notext=True, cmap="seismic", title="")
+                             rot=patch.center, coord="G", min=-6.0, max=6.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 1), notext=True, cmap="seismic", title="")
         self.make_cbar("Mean removed I (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # P
-        hp.gnomview(pol_map, rot=patch.center, coord="G", min=0, max=0.4, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
+        hp.gnomview(pol_map, rot=patch.center, coord="G", min=0, max=1.0, cbar=False, reso=reso, xsize=xsize, ysize=ysize, sub=(2, 2, 2), notext=True, cmap="seismic", title="")
         self.make_cbar("Differential P (MJy/sr)", "%1.1f")
         self.make_coord_labels_patches(phis, thetas, patch, coord="G", lw=1)
         # p
@@ -206,7 +206,8 @@ class PatchPlotter(leap_app.App):
         pl.close()
 
     def get_sensitivity(self, patch_area, pixel_area, obs_time_hours):
-        Nf = {1200: 0.3856, 860: 0.2873, 600: 0.1547} # in MJy/sr sqrt(s)
+        # Nf = {1200: 0.3856, 860: 0.2873, 600: 0.1547} # in MJy/sr sqrt(s)
+        Nf = {1200: 0.318, 860: 0.237, 600: 0.127} # in MJy/sr sqrt(s), less pessimistic
         scanning_time = obs_time_hours*3600.0 # 4 days in seconds
         sensitivity = Nf[self.settings.frequency] * np.sqrt(patch_area / pixel_area) * 1.0/np.sqrt(scanning_time)
         return sensitivity
@@ -239,9 +240,9 @@ class PatchPlotter(leap_app.App):
 
     def run(self):
         self.load_pysm()
-        patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0), 
+        patches = [Patch("patch0", [-106.41, 10.631, 0], 5.0, 5.0, 96.0, 2.0)] #, 
                          #Patch("patch0b", [-110.5, 14.25, 0], 5.0, 5.0, 96.0, 2.0)] #,
-                         Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #,
+                         #Patch("patch1a", [-119.424, -22.331, 0], 2.0, 2.0, 48.0, 1.0), Patch("patch1b", [-46.996, 31.454, 0], 2.0, 2.0, 48.0, 1.0)] #,
                          #Patch("patch2", [-42.234, 11.614, 0], 1.0, 10.0, 96.0, 1.0)]
         #self.plot_I_P_p_fullsky(patches, plot_patch=True)
         self.patches = patches

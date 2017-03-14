@@ -4,7 +4,7 @@ from leap.lib.units.angles import *
 settings = generic.Class()
 
 settings.nside = 2048
-settings.frequency = 1200 # 600, 860, 1200
+settings.frequency = 600 # 600, 860, 1200
 settings.show = True
 settings.save = False
 
